@@ -1,0 +1,1 @@
+[Database schema architecture for this youtube clone application](https://app.eraser.io/workspace/YtPqZ1VogxGy1jzIDkzj)

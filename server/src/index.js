@@ -1,20 +1,32 @@
-import mongoose from 'mongoose';
-import { DB_NAME } from './constants.js';
 import connectDB from './db/index.js';
-import express from 'express';
-// import dotenv from 'dotenv';
+import { app } from './App.js';
+import dotenv from 'dotenv';
 
-// dotenv.config({path: './server/env'});
+dotenv.config({path: './server/env'});
 
-// const app = express();
+const port = process.env.PORT || 8000;
 
-connectDB();
+connectDB()
+.then(() => {
+    app.on("errror", (error) => {
+        console.log('Error seting up server:', error);
+        throw error;
+    })
+    app.listen(port, () => {
+        console.log(`App serving on port: ${port}`);
+    })
+})
+.catch((err) => {
+    console.log('Error connecting DB:', err);
+})
 
 
 
 /*
 // connecting DB inside index file with iffy function (can also define a function and call it)
-const port = process.env.PORT || 8000;
+
+import mongoose from 'mongoose';
+import { DB_NAME } from './constants.js';
 
 ( async () => {
     try{

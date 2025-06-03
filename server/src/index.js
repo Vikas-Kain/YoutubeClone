@@ -13,7 +13,7 @@ connectDB()
         throw error;
     })
     app.listen(port, () => {
-        console.log(`App serving on port: ${port}`);
+        console.log(`App serving at http://localhost:${port}`);
     })
 })
 .catch((err) => {

@@ -16,7 +16,7 @@ const videoSchema = new Schema({
         ref: "User"
     },
     videoFile: {
-        type: String,
+        type: String,   // cloudinary url
         required: true
     },
     thumbnail: {
@@ -24,7 +24,7 @@ const videoSchema = new Schema({
         required: true
     },
     duration: {
-        type: Number,
+        type: Number,   // Given by cloudinary
         required: true
     },
     views: {
@@ -38,3 +38,5 @@ const videoSchema = new Schema({
 }, {timestamps: true});
 
 videoSchema.plugin(mongooseAggrigatePaginate);
+
+export const Video = mongoose.model("Video", videoSchema)

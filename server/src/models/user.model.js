@@ -47,12 +47,14 @@ const userSchema = new Schema({
     }
 }, {timestamps: true});
 
+// pre: document middleware executes before following updates are made in userSchema's instance : "validate", "save", "remove", "updateOne", "deleteOne", "init"
 userSchema.pre("save", async function (next) {
     if (!this.isModified("password")) return next();
     this.password = bcrypt.hash(this.password, 10)
     next()
 })
 
+// methods: model specific functions
 userSchema.methods.isPasswordCorrect = async function (password) {
     return await bcrypt.compare(password, this.password)
 }

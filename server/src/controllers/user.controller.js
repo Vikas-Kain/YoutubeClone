@@ -5,15 +5,34 @@ import { uploadFileOnCloudinary } from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js";
 import deleteFile from "../utils/deleteFile.js";
 
-const cleanupFiles = async ( ...paths ) => {
+const cleanupFiles = async (...paths) => {
     for (const filepath of paths) {
-        if ( filepath ) {
+        if (filepath) {
             await deleteFile(filepath)
         }
     }
 }
 
-const registerUser = asyncHandler( async (req, res) => {
+const generateAccessAndRefreshToken = async (userId) => {
+    try {
+        const user = await User.findById(userId)
+        const accessToken = await user.generateAccessToken()
+        const refreshToken = await user.generateRefreshToken()
+
+        user.refreshToken = refreshToken
+        await user.save({ validateBeforeSave: false })
+
+        return { accessToken, refreshToken }
+    }
+    catch (error) {
+        throw new ApiError(500, "Something went wrong while generating tokens")
+    }
+
+}
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const registerUser = asyncHandler(async (req, res) => {
     // get user info
     // check images (avatar, coverImage)
     // validate details
@@ -36,20 +55,19 @@ const registerUser = asyncHandler( async (req, res) => {
     const coverImageLocalPath = coverImageFile?.path
 
     if (!avatarLocalPath) {
-        if ( coverImageLocalPath ) await deleteFile(coverImageLocalPath)
+        if (coverImageLocalPath) await deleteFile(coverImageLocalPath)
         throw new ApiError(400, "Avatar is required")
     }
-    
+
     // validate input fields
     if ([username, email, fullname, password].some
-    ((field) => field?.trim() === "")) {
+        ((field) => field?.trim() === "")) {
         await cleanupFiles(avatarLocalPath, coverImageLocalPath)
         throw new ApiError(400, "All fields are required")
     };
 
     // validate email (regex, valid email)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if ( !emailRegex.test(email) ) {
+    if (!emailRegex.test(email)) {
         await cleanupFiles(avatarLocalPath, coverImageLocalPath)
         throw new ApiError(400, "Invalid Email")
     }
@@ -73,7 +91,7 @@ const registerUser = asyncHandler( async (req, res) => {
     }
 
     const coverImage = await uploadFileOnCloudinary(coverImageLocalPath)
-    if ( coverImageLocalPath && !coverImage ) {
+    if (coverImageLocalPath && !coverImage) {
         await cleanupFiles(avatarLocalPath, coverImageLocalPath)
         throw new ApiError(500, "Couldn't upload Cover Image. Try again")
     }
@@ -88,11 +106,12 @@ const registerUser = asyncHandler( async (req, res) => {
         coverImage: coverImage?.url || ""
     })
 
-    // console.log("user: ", user)
+    // console.log(coverImage)
+    // console.log(avatar)
 
     // check if user is created in DB
-    const createdUser = await User.findById(user._id).select( "-password -refreshToken" )     // remove password and refreshToken
-    if ( !createdUser ) {
+    const createdUser = await User.findById(user._id).select("-password -refreshToken")     // remove password and refreshToken
+    if (!createdUser) {
         throw new ApiError(500, "Failed to create user in Database")
     }
 
@@ -102,4 +121,87 @@ const registerUser = asyncHandler( async (req, res) => {
 
 })
 
-export { registerUser } 
+const loginUser = asyncHandler(async (req, res) => {
+    // req.body -> data
+    // validate
+    // search user
+    // check password
+    //generate access token
+
+    const { username, email, password } = req.body
+
+    // validate fields
+    if (( !username || username.trim() === "" ) && ( !email || email.trim() === "")) {
+        throw new ApiError(400, "username or email required")
+    }
+    if ( email && !emailRegex.test(email) ) {
+        throw new ApiError(400, "Invalid Email")
+    }
+    if ( !password || password.trim() == "") {
+        throw new ApiError(400, "password required")
+    }
+
+    // find user
+    const user = await User.findOne({
+        $or: [{ username }, { email }]
+    })
+
+    if (!user) {
+        throw new ApiError(404, "User with given details could not be found")
+    }
+
+    const isValidPassword = await user.isPasswordCorrect(password)
+    if (!isValidPassword) {
+        throw new ApiError(404, "Wrong password")
+    }
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id)
+
+    user.refreshToken = refreshToken        // Can also get updated user (user with refreshToken) by querying DB (User.findById(user._id))
+    delete user.password
+
+    const options = {
+        httpsOnly : true,
+        secure : true
+    }
+
+    return res.
+    status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+        new ApiResponse(
+            200,
+            {
+                user : user, accessToken, refreshToken      // tokens sent in data in case of mobile app dev (no concept of cookie)
+            },
+            "User loggedIn successfully"
+        )
+    )
+
+})
+
+
+const logoutUser = asyncHandler( async (req, res) => {
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set : {
+                refreshToken : undefined
+            }
+        }
+    )
+
+    const options = {
+        httpsOnly : true,
+        secure : true
+    }
+
+    res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+})
+
+
+export { registerUser, loginUser, logoutUser } 

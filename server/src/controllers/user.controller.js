@@ -388,6 +388,79 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         )
 })
 
+const getUserChannelProfile = asyncHandler( async (req, res) => {
+    // get user details from req.params
+    const { username } = req.params
+
+    // get subscribers of channel 'username'
+    // aggregate pipeline returns array of objects of query responses
+    const channel = await User.aggregate([
+        {
+            $match: {
+                username : username.toLowerCase()
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo"
+            }
+        },
+        {
+            $addFields: {
+                subscribersCount: {
+                    $size: "$subscribers"
+                },
+                subscribedToCount: {
+                    $size: "$subscribedTo"
+                },
+                isSubscribed: {
+                    $cond: {
+                        if: { $in: [req.user?._id, "$subscribers.subscriber"]},
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        {
+            $project: {
+                fullname: 1,
+                username: 1,
+                subscribersCount: 1,
+                subscribedToCount: 1,
+                avatar: 1,
+                coverImage: 1,
+                createdAt: 1
+            }
+        }
+    ])
+
+    if ( !channel?.length) {
+        throw new ApiError(404, "Channel does not exist")
+    }
+
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(200,
+            channel[0],
+            "User channel fetched successfully"
+        )
+    )
+    
+})
+
 
 export {
     registerUser, loginUser, logoutUser, refreshAccessToken, changeUserPassword, getCurrentUser, updateUserDetails,

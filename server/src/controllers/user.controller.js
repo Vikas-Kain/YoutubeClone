@@ -31,6 +31,13 @@ const generateAccessAndRefreshToken = async (userId) => {
 
 }
 
+const sanitizeUser = (user) => {
+    const userObj = user.toObject()
+    delete userObj.password
+    delete userObj.refreshToken
+    return userObj
+}
+
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -158,11 +165,11 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id)
 
-    user.refreshToken = refreshToken        // Can also get updated user (user with refreshToken) by querying DB (User.findById(user._id))
-    delete user.password
+    // user.refreshToken = refreshToken        // Can also get updated user (user with refreshToken) by querying DB (User.findById(user._id))
+    user = sanitizeUser(user)       // remove password and refreshToken
 
     const options = {
-        httpsOnly: true,
+        httpOnly: true,
         secure: true
     }
 
@@ -194,7 +201,7 @@ const logoutUser = asyncHandler(async (req, res) => {
     )
 
     const options = {
-        httpsOnly: true,
+        httpOnly: true,
         secure: true
     }
 
@@ -205,15 +212,15 @@ const logoutUser = asyncHandler(async (req, res) => {
 })
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
-    // get refreshToken from req.cookie (req.body in case of cookie not sent at frontend)
-    const incomingRefreshToken = req.cookie.refreshToken || req.body.refreshToken
+    // get refreshToken from req.cookies (req.body in case of cookie not sent at frontend)
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
 
     if (!incomingRefreshToken) {
         throw new ApiError(401, "Unauthorized request")
     }
 
     try {
-        decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+        const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
 
         // find user by _id
         const user = await User.findById(decodedToken?._id)
@@ -230,8 +237,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         // Generate access and refresh token (to send in cookie)
         const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id)
 
+        user = sanitizeUser(user)
+
         const options = {
-            httpsOnly: true,
+            httpOnly: true,
             secure: true
         }
 
@@ -259,7 +268,7 @@ const changeUserPassword = asyncHandler(async (req, res) => {
 
     const user = await User.findById(req.user?._id)
 
-    if (!user.isPasswordCorrect(oldPassword)) {
+    if (!(await user.isPasswordCorrect(oldPassword))) {
         throw new ApiError(400, "Incorrect password")
     }
 
@@ -273,11 +282,14 @@ const changeUserPassword = asyncHandler(async (req, res) => {
         )
 })
 
-const getCurrentUser = asyncHandler(async (_, res) => {
+const getCurrentUser = asyncHandler(async (req, res) => {
     return res
         .status(200)
         .json(
-            new ApiResponse(200, res.user, "Got current user successfully")
+            new ApiResponse(200, {
+                user : sanitizeUser(req.user)
+            },
+            "Got current user successfully")
         )
 })
 
@@ -288,14 +300,14 @@ const updateUserDetails = asyncHandler(async (req, res) => {
         throw new ApiError(400, "At least one field required")
     }
 
-    const user = await findByIdAndUpdate(req.user?._id,
+    const user = await User.findByIdAndUpdate(req.user?._id,
         {
             $set: {
                 fullname
             }
         },
         { new: true }
-    ).select("-password")
+    ).select("-password -refreshToken")
 
     return res
         .status(200)
@@ -313,64 +325,71 @@ const updateUserDetails = asyncHandler(async (req, res) => {
 const updateUserAvatar = asyncHandler(async (req, res) => {
     const avatarLocalPath = req.file?.path
 
-    if ( !avatarLocalPath ) {
+    if (!avatarLocalPath) {
         throw new ApiError(400, "Avatar file required")
     }
 
     // upload on cloudinary
     const avatar = await uploadFileOnCloudinary(avatarLocalPath)
 
-    if ( !avatar.url ) {
+    if (!avatar.url) {
         throw new ApiError(500, "Error uploading avatar file on cloudinary")
     }
 
-    const user = await User.findByIdAndUpdate(res.user?._id,
+    const user = await User.findByIdAndUpdate(req.user?._id,
         {
             $set: {
-                avatar : avatar.url
+                avatar: avatar.url
             }
         },
-        { new : true}
+        { new: true }
     ).select("-password")
 
     return res
-    .status(200)
-    .json(
-        new ApiResponse(200, { user }, "Avatar updated successfully")
-    )
+        .status(200)
+        .json(
+            new ApiResponse(200, {
+                user : sanitizeUser(user)
+            },
+            "Avatar updated successfully")
+        )
 })
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {
     const coverImageLocalPath = req.file?.path
 
-    if ( !coverImageLocalPath ) {
+    if (!coverImageLocalPath) {
         throw new ApiError(400, "CoverImage file required")
     }
 
     // upload on cloudinary
     const coverImage = await uploadFileOnCloudinary(coverImageLocalPath)
 
-    if ( !coverImage.url ) {
+    if (!coverImage.url) {
         throw new ApiError(500, "Error uploading coverImage file on cloudinary")
     }
 
-    const user = await User.findByIdAndUpdate(res.user?._id,
+    const user = await User.findByIdAndUpdate(req.user?._id,
         {
             $set: {
-                coverImage : coverImage.url
+                coverImage: coverImage.url
             }
         },
-        { new : true }
+        { new: true }
     ).select("-password")
 
     return res
-    .status(200)
-    .json(
-        new ApiResponse(200, { user }, "Avatar updated successfully")
-    )
+        .status(200)
+        .json(
+            new ApiResponse(200, {
+                user : sanitizeUser(user)
+            },
+            "Avatar updated successfully")
+        )
 })
 
 
-export { registerUser, loginUser, logoutUser, refreshAccessToken, changeUserPassword, getCurrentUser, updateUserDetails,
+export {
+    registerUser, loginUser, logoutUser, refreshAccessToken, changeUserPassword, getCurrentUser, updateUserDetails,
     updateUserAvatar, updateUserCoverImage
- }
+}

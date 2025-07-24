@@ -140,13 +140,13 @@ const loginUser = asyncHandler(async (req, res) => {
     const { username, email, password } = req.body
 
     // validate fields
-    if ((!username || username.trim() === "") && (!email || email.trim() === "")) {
+    if ( !username?.trim() && !email?.trim()) {
         throw new ApiError(400, "username or email required")
     }
-    if (email && !emailRegex.test(email)) {
+    if (email && !emailRegex.test(email?.trim())) {
         throw new ApiError(400, "Invalid Email")
     }
-    if (!password || password.trim() == "") {
+    if ( !password?.trim() ) {
         throw new ApiError(400, "password required")
     }
 
@@ -167,22 +167,21 @@ const loginUser = asyncHandler(async (req, res) => {
     const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id)
 
     // user.refreshToken = refreshToken        // Can also get updated user (user with refreshToken) by querying DB (User.findById(user._id))
-    user = sanitizeUser(user)       // remove password and refreshToken
 
     const options = {
         httpOnly: true,
         secure: true
     }
 
-    return res.
-        status(200)
+    return res
+        .status(200)
         .cookie("accessToken", accessToken, options)
         .cookie("refreshToken", refreshToken, options)
         .json(
             new ApiResponse(
                 200,
                 {
-                    user: user, accessToken, refreshToken      // tokens sent in data in case of mobile app dev (no concept of cookie)
+                    user: sanitizeUser(user), accessToken, refreshToken      // tokens sent in data in case of mobile app dev (no concept of cookie)
                 },
                 "User loggedIn successfully"
             )
@@ -195,8 +194,8 @@ const logoutUser = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set: {
-                refreshToken: undefined
+            $unset: {
+                refreshToken: 1     // can also set refreshToken as null
             }
         }
     )
@@ -206,10 +205,13 @@ const logoutUser = asyncHandler(async (req, res) => {
         secure: true
     }
 
-    res
+    return res
         .status(200)
         .clearCookie("accessToken", options)
         .clearCookie("refreshToken", options)
+        .json(
+            new ApiResponse(200, {}, "User logged out successfully")
+        )
 })
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
@@ -238,8 +240,6 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         // Generate access and refresh token (to send in cookie)
         const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id)
 
-        user = sanitizeUser(user)
-
         const options = {
             httpOnly: true,
             secure: true
@@ -253,7 +253,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
                 new ApiResponse(
                     200,
                     {
-                        user: user, accessToken, refreshToken
+                        user: sanitizeUser(user), accessToken, refreshToken
                     },
                     "Access token generated successfully"
                 )
@@ -297,7 +297,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 const updateUserDetails = asyncHandler(async (req, res) => {
     const { fullname } = req.body
 
-    if (!fullname || fullname.trim() === "") {
+    if ( !fullname?.trim() ) {
         throw new ApiError(400, "At least one field required")
     }
 
@@ -385,7 +385,7 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
             new ApiResponse(200, {
                 user: sanitizeUser(user)
             },
-                "Avatar updated successfully")
+                "cover Image updated successfully")
         )
 })
 
